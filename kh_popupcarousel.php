@@ -53,10 +53,13 @@ class Kh_popupcarousel extends Module
     public function install()
     {
         Configuration::updateValue('KH_POPUPCAROUSEL_LIVE_MODE', false);
-
-        return parent::install() &&
-            $this->registerHook('header') &&
-            $this->registerHook('displayBackOfficeHeader');
+        
+        return parent::install()
+            && $this->registerHook('header')
+            && $this->registerHook('displayBackOfficeHeader')
+            && $this->registerHook('actionCartSave')
+            && $this->registerHook('displayCartModalFooter');
+            ;
     }
 
     public function uninstall()
@@ -170,4 +173,37 @@ class Kh_popupcarousel extends Module
         $this->context->controller->addJS($this->_path.'views/js/front.js');
         $this->context->controller->addCSS($this->_path.'views/css/front.css');
     }
+
+    public function hookDisplayCartModalFooter($params)
+    {
+        $cart = $params['cart'];
+
+        $lastProductId = $cart->getLastProduct()['id_product'];
+        if ($lastProductId > 0) {
+            $product = new Product($lastProductId);
+            $categoryIds = $product->getCategories();
+
+            if (!empty($categoryIds)) {
+                $categoryId = (int) $categoryIds[0];
+
+                $products = Product::getProducts($this->context->language->id, 0, 14, 'id_product', 'ASC', $categoryId);
+                $context = Context::getContext();
+                $currency = new Currency($context->currency->id);
+                $preparedProducts = [];
+                foreach ($products as $index => $product) {
+                    $imageId = Product::getCover($product['id_product'])['id_image'];
+                    $preparedProducts[$index]['id_product'] = $product['id_product'];
+                    $preparedProducts[$index]['name'] = $product['name'];
+                    $preparedProducts[$index]['price'] = round(Product::getPriceStatic($product['id_product'], true), 2);
+                    $preparedProducts[$index]['currency'] = $currency->iso_code;
+                    $preparedProducts[$index]['product_link'] = $context->link->getProductLink($product['id_product'], null, null, null, null, null, $this->context->language->id);
+                    $preparedProducts[$index]['image_link'] = $context->link->getImageLink($product['link_rewrite'], $product['id_product'] . '-' . $imageId, 'large_default');
+                }
+                $this->context->smarty->assign(['products' => $preparedProducts]);
+
+                return $this->display(__FILE__, 'views/templates/front/carousel.tpl');
+            }
+        }
+    }
+
 }
